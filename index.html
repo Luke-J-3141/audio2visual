@@ -83,261 +83,286 @@
             🎵 Try playing music, YouTube videos, or use your microphone! Experiment with different visualizers and settings.
         </div>
     </div>
+
     <script>
-
-    class EnhancedAudioVisualizer {
-        constructor() {
-            this.canvas = document.getElementById('canvas');
-            this.ctx = this.canvas.getContext('2d');
-            this.audioContext = null;
-            this.analyser = null;
-            this.dataArray = null;
-            this.frequencyData = null;
-            this.isRunning = false;
-            this.particles = [];
-            this.time = 0;
-            this.colorOffset = 0;
-            this.selectedColor = { h: 200, s: 100, l: 50 };
-            this.audioSource = 'microphone';
-            this.previousData = null;
-            
-            this.resize();
-            window.addEventListener('resize', () => this.resize());
-            
-            this.setupControls();
-            this.setupColorWheel();
-        }
-
-        resize() {
-            this.canvas.width = window.innerWidth;
-            this.canvas.height = window.innerHeight;
-        }
-
-        setupControls() {
-            document.getElementById('micBtn').onclick = () => this.setAudioSource('microphone');
-            document.getElementById('systemBtn').onclick = () => this.setAudioSource('system');
-            document.getElementById('startBtn').onclick = () => this.start();
-            document.getElementById('stopBtn').onclick = () => this.stop();
-            document.getElementById('colorMode').onchange = () => this.updateColorMode();
-            
-            // Slider updates
-            document.getElementById('sensitivity').oninput = (e) => {
-                document.getElementById('sensitivityValue').textContent = e.target.value;
-            };
-            document.getElementById('speed').oninput = (e) => {
-                document.getElementById('speedValue').textContent = e.target.value;
-            };
-        }
-
-        setAudioSource(source) {
-            this.audioSource = source;
-            document.getElementById('micBtn').classList.toggle('active', source === 'microphone');
-            document.getElementById('systemBtn').classList.toggle('active', source === 'system');
-        }
-
-        updateColorMode() {
-            const mode = document.getElementById('colorMode').value;
-            document.getElementById('colorWheelContainer').style.display = 
-                mode === 'wheel' ? 'block' : 'none';
-        }
-
-        setupColorWheel() {
-            const wheel = document.getElementById('colorWheel');
-            wheel.onclick = (e) => {
-                const rect = wheel.getBoundingClientRect();
-                const centerX = rect.width / 2;
-                const centerY = rect.height / 2;
-                const x = e.clientX - rect.left - centerX;
-                const y = e.clientY - rect.top - centerY;
+        class EnhancedAudioVisualizer {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.audioContext = null;
+                this.analyser = null;
+                this.dataArray = null;
+                this.frequencyData = null;
+                this.isRunning = false;
+                this.particles = [];
+                this.time = 0;
+                this.colorOffset = 0;
+                this.selectedColor = { h: 200, s: 100, l: 50 };
+                this.audioSource = 'microphone';
+                this.previousData = null;
                 
-                const angle = Math.atan2(y, x);
-                const hue = ((angle * 180 / Math.PI) + 360) % 360;
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
                 
-                this.selectedColor.h = hue;
-            };
-        }
+                this.setupControls();
+                this.setupColorWheel();
+            }
 
-        async start() {
-            try {
-                let stream;
+            resize() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            setupControls() {
+                document.getElementById('micBtn').onclick = () => this.setAudioSource('microphone');
+                document.getElementById('systemBtn').onclick = () => this.setAudioSource('system');
+                document.getElementById('startBtn').onclick = () => this.start();
+                document.getElementById('stopBtn').onclick = () => this.stop();
+                document.getElementById('colorMode').onchange = () => this.updateColorMode();
                 
-                if (this.audioSource === 'system') {
-                    // Try to get system audio (Chrome/Edge only)
-                    try {
-                        stream = await navigator.mediaDevices.getDisplayMedia({ 
-                            audio: true, 
-                            video: false 
-                        });
-                    } catch {
-                        // Fallback to microphone if system audio fails
-                        alert('System audio capture not supported in this browser. Switching to microphone.');
+                // Slider updates
+                document.getElementById('sensitivity').oninput = (e) => {
+                    document.getElementById('sensitivityValue').textContent = e.target.value;
+                };
+                document.getElementById('speed').oninput = (e) => {
+                    document.getElementById('speedValue').textContent = e.target.value;
+                };
+            }
+
+            setAudioSource(source) {
+                this.audioSource = source;
+                document.getElementById('micBtn').classList.toggle('active', source === 'microphone');
+                document.getElementById('systemBtn').classList.toggle('active', source === 'system');
+            }
+
+            updateColorMode() {
+                const mode = document.getElementById('colorMode').value;
+                document.getElementById('colorWheelContainer').style.display = 
+                    mode === 'wheel' ? 'block' : 'none';
+            }
+
+            setupColorWheel() {
+                const wheel = document.getElementById('colorWheel');
+                wheel.onclick = (e) => {
+                    const rect = wheel.getBoundingClientRect();
+                    const centerX = rect.width / 2;
+                    const centerY = rect.height / 2;
+                    const x = e.clientX - rect.left - centerX;
+                    const y = e.clientY - rect.top - centerY;
+                    
+                    const angle = Math.atan2(y, x);
+                    const hue = ((angle * 180 / Math.PI) + 360) % 360;
+                    
+                    this.selectedColor.h = hue;
+                };
+            }
+
+            async start() {
+                try {
+                    let stream;
+                    
+                    if (this.audioSource === 'system') {
+                        // Try to get system audio (Chrome/Edge only)
+                        try {
+                            stream = await navigator.mediaDevices.getDisplayMedia({ 
+                                audio: true, 
+                                video: false 
+                            });
+                        } catch {
+                            // Fallback to microphone if system audio fails
+                            alert('System audio capture not supported in this browser. Switching to microphone.');
+                            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                            this.setAudioSource('microphone');
+                        }
+                    } else {
                         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        this.setAudioSource('microphone');
                     }
-                } else {
-                    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.analyser = this.audioContext.createAnalyser();
+                    const source = this.audioContext.createMediaStreamSource(stream);
+                    
+                    source.connect(this.analyser);
+                    this.analyser.fftSize = 512;
+                    this.analyser.smoothingTimeConstant = 0.8;
+                    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                    this.frequencyData = new Uint8Array(this.analyser.frequencyBinCount);
+                    this.previousData = new Float32Array(this.analyser.frequencyBinCount);
+                    
+                    this.isRunning = true;
+                    document.getElementById('startBtn').style.display = 'none';
+                    document.getElementById('stopBtn').style.display = 'inline-block';
+                    document.getElementById('status').style.display = 'none';
+                    document.getElementById('micIndicator').classList.add('active');
+                    
+                    this.animate();
+                } catch (error) {
+                    alert('Error accessing audio: ' + error.message);
+                }
+            }
+
+            stop() {
+                this.isRunning = false;
+                if (this.audioContext) {
+                    this.audioContext.close();
+                }
+                document.getElementById('startBtn').style.display = 'inline-block';
+                document.getElementById('stopBtn').style.display = 'none';
+                document.getElementById('status').style.display = 'block';
+                document.getElementById('micIndicator').classList.remove('active');
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            getColor(index, max, intensity = 1) {
+                const mode = document.getElementById('colorMode').value;
+                const speed = document.getElementById('speed').value / 100;
+                
+                switch (mode) {
+                    case 'auto':
+                        const autoHue = (this.colorOffset + (index / max) * 360) % 360;
+                        return `hsla(${autoHue}, 90%, ${40 + intensity * 40}%, ${0.8 + intensity * 0.2})`;
+                    
+                    case 'wheel':
+                        const wheelHue = (this.selectedColor.h + (index / max) * 60) % 360;
+                        return `hsla(${wheelHue}, 100%, ${40 + intensity * 40}%, ${0.7 + intensity * 0.3})`;
+                    
+                    case 'rainbow':
+                        return `hsla(${(index / max) * 360 + this.time * speed}, 100%, ${50 + intensity * 30}%, ${0.8})`;
+                    
+                    case 'neon':
+                        return index < max/2 ? 
+                            `rgba(255, ${Math.floor(100 * intensity)}, 255, ${0.7 + intensity * 0.3})` : 
+                            `rgba(0, 255, 255, ${0.7 + intensity * 0.3})`;
+                    
+                    case 'fire':
+                        return `hsla(${60 - (index/max) * 60}, 100%, ${40 + intensity * 50}%, ${0.8})`;
+                    
+                    case 'ocean':
+                        return `hsla(${200 + (index/max) * 60}, 100%, ${30 + intensity * 50}%, ${0.8})`;
+                    
+                    case 'purple':
+                        return `hsla(${280 + (index/max) * 40}, 100%, ${40 + intensity * 40}%, ${0.8})`;
+                }
+            }
+
+            animate() {
+                if (!this.isRunning) return;
+                
+                this.analyser.getByteFrequencyData(this.dataArray);
+                this.time += 0.016 * (document.getElementById('speed').value / 100);
+                this.colorOffset = (this.colorOffset + 2) % 360;
+                
+                const visualizerType = document.getElementById('visualizerType').value;
+                const smoothing = document.getElementById('smoothing').checked;
+                const glow = document.getElementById('glow').checked;
+                
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                if (glow) {
+                    this.ctx.shadowBlur = 20;
                 }
                 
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                this.analyser = this.audioContext.createAnalyser();
-                const source = this.audioContext.createMediaStreamSource(stream);
+                // Call the appropriate visualizer function
+                switch (visualizerType) {
+                    case 'waveform':
+                        this.drawWaveform();
+                        break;
+                    case 'bars':
+                        this.drawBars();
+                        break;
+                    case 'circle':
+                        this.drawCircle();
+                        break;
+                    case 'particles':
+                        this.drawParticles();
+                        break;
+                    case 'geometric':
+                        this.drawGeometric();
+                        break;
+                    case 'spiral':
+                        this.drawSpiral();
+                        break;
+                    case 'tunnel':
+                        this.drawTunnel();
+                        break;
+                }
                 
-                source.connect(this.analyser);
-                this.analyser.fftSize = 512;
-                this.analyser.smoothingTimeConstant = 0.8;
-                this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-                this.frequencyData = new Uint8Array(this.analyser.frequencyBinCount);
-                this.previousData = new Float32Array(this.analyser.frequencyBinCount);
-                
-                this.isRunning = true;
-                document.getElementById('startBtn').style.display = 'none';
-                document.getElementById('stopBtn').style.display = 'inline-block';
-                document.getElementById('status').style.display = 'none';
-                document.getElementById('micIndicator').classList.add('active');
-                
-                this.animate();
-            } catch (error) {
-                alert('Error accessing audio: ' + error.message);
+                this.ctx.shadowBlur = 0;
+                requestAnimationFrame(() => this.animate());
+            }
+
+            // Placeholder methods that will call external functions
+            drawWaveform() {
+                if (typeof drawEnhancedWaveform === 'function') {
+                    drawEnhancedWaveform(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, 
+                        this.getColor.bind(this), this.time, this.previousData, 
+                        document.getElementById('sensitivity').value / 100,
+                        document.getElementById('smoothing').checked,
+                        document.getElementById('glow').checked);
+                }
+            }
+
+            drawBars() {
+                if (typeof drawSpectralBars === 'function') {
+                    drawSpectralBars(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, 
+                        this.getColor.bind(this), this.time,
+                        document.getElementById('sensitivity').value / 100,
+                        document.getElementById('glow').checked);
+                }
+            }
+
+            drawCircle() {
+                if (typeof drawRadialSpectrum === 'function') {
+                    drawRadialSpectrum(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, 
+                        this.getColor.bind(this), this.time,
+                        document.getElementById('sensitivity').value / 100,
+                        document.getElementById('glow').checked);
+                }
+            }
+
+            drawParticles() {
+                if (typeof drawParticleExplosion === 'function') {
+                    drawParticleExplosion(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, 
+                        this.getColor.bind(this), this.time, this.particles,
+                        document.getElementById('sensitivity').value / 100);
+                }
+            }
+
+            drawGeometric() {
+                if (typeof drawGeometricMatrix === 'function') {
+                    drawGeometricMatrix(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, 
+                        this.getColor.bind(this), this.time,
+                        document.getElementById('sensitivity').value / 100,
+                        document.getElementById('glow').checked);
+                }
+            }
+
+            drawSpiral() {
+                if (typeof drawSpiralGalaxy === 'function') {
+                    drawSpiralGalaxy(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, 
+                        this.getColor.bind(this), this.time,
+                        document.getElementById('sensitivity').value / 100,
+                        document.getElementById('glow').checked);
+                }
+            }
+
+            drawTunnel() {
+                if (typeof drawWarpTunnel === 'function') {
+                    drawWarpTunnel(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, 
+                        this.getColor.bind(this), this.time,
+                        document.getElementById('sensitivity').value / 100,
+                        document.getElementById('glow').checked);
+                }
             }
         }
 
-        stop() {
-            this.isRunning = false;
-            if (this.audioContext) {
-                this.audioContext.close();
-            }
-            document.getElementById('startBtn').style.display = 'inline-block';
-            document.getElementById('stopBtn').style.display = 'none';
-            document.getElementById('status').style.display = 'block';
-            document.getElementById('micIndicator').classList.remove('active');
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        }
+        // Initialize the visualizer when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            const visualizer = new EnhancedAudioVisualizer();
+        });
+    </script>
 
-        getColor(index, max, intensity = 1) {
-            const mode = document.getElementById('colorMode').value;
-            const speed = document.getElementById('speed').value / 100;
-            
-            switch (mode) {
-                case 'auto':
-                    const autoHue = (this.colorOffset + (index / max) * 360) % 360;
-                    return `hsla(${autoHue}, 90%, ${40 + intensity * 40}%, ${0.8 + intensity * 0.2})`;
-                
-                case 'wheel':
-                    const wheelHue = (this.selectedColor.h + (index / max) * 60) % 360;
-                    return `hsla(${wheelHue}, 100%, ${40 + intensity * 40}%, ${0.7 + intensity * 0.3})`;
-                
-                case 'rainbow':
-                    return `hsla(${(index / max) * 360 + this.time * speed}, 100%, ${50 + intensity * 30}%, ${0.8})`;
-                
-                case 'neon':
-                    return index < max/2 ? 
-                        `rgba(255, ${Math.floor(100 * intensity)}, 255, ${0.7 + intensity * 0.3})` : 
-                        `rgba(0, 255, 255, ${0.7 + intensity * 0.3})`;
-                
-                case 'fire':
-                    return `hsla(${60 - (index/max) * 60}, 100%, ${40 + intensity * 50}%, ${0.8})`;
-                
-                case 'ocean':
-                    return `hsla(${200 + (index/max) * 60}, 100%, ${30 + intensity * 50}%, ${0.8})`;
-                
-                case 'purple':
-                    return `hsla(${280 + (index/max) * 40}, 100%, ${40 + intensity * 40}%, ${0.8})`;
-            }
-        }
-        animate() {
-        if (!this.isRunning) return;
-        
-        this.analyser.getByteFrequencyData(this.dataArray);
-        this.time += 0.016 * (document.getElementById('speed').value / 100);
-        this.colorOffset = (this.colorOffset + 2) % 360;
-        
-        const visualizerType = document.getElementById('visualizerType').value;
-        const smoothing = document.getElementById('smoothing').checked;
-        const glow = document.getElementById('glow').checked;
-        
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        if (glow) {
-            this.ctx.shadowBlur = 20;
-        }
-        
-        // Call the appropriate visualizer function from your external file
-        switch (visualizerType) {
-            case 'waveform':
-                this.drawWaveform();
-                break;
-            case 'bars':
-                this.drawBars();
-                break;
-            case 'circle':
-                this.drawCircle();
-                break;
-            case 'particles':
-                this.drawParticles();
-                break;
-            case 'geometric':
-                this.drawGeometric();
-                break;
-            case 'spiral':
-                this.drawSpiral();
-                break;
-            case 'tunnel':
-                this.drawTunnel();
-                break;
-        }
-        
-        this.ctx.shadowBlur = 0;
-        requestAnimationFrame(() => this.animate());
-    }
-
-        drawWaveform() {
-            if (typeof drawWaveform === 'function') {
-            drawEnhancedWaveform(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, this.getColor.bind(this), this.time);
-            }
-        }
-
-        drawBars() {
-            if (typeof drawBars === 'function') {
-            drawBars(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, this.getColor.bind(this), this.time);
-            }
-        }
-
-        drawCircle() {
-            if (typeof drawCircle === 'function') {
-            drawCircle(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, this.getColor.bind(this), this.time);
-            }
-        }
-
-        drawParticles() {
-            if (typeof drawParticles === 'function') {
-            drawParticles(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, this.getColor.bind(this), this.time, this.particles);
-            }
-        }
-
-        drawGeometric() {
-            if (typeof drawGeometric === 'function') {
-            drawGeometric(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, this.getColor.bind(this), this.time);
-            }
-        }
-
-        drawSpiral() {
-            if (typeof drawSpiral === 'function') {
-            drawSpiral(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, this.getColor.bind(this), this.time);
-            }
-        }
-
-        drawTunnel() {
-            if (typeof drawTunnel === 'function') {
-            drawTunnel(this.ctx, this.dataArray, this.canvas.width, this.canvas.height, this.getColor.bind(this), this.time);
-            }
-        }
-    }
-
-    // Initialize the visualizer
-const visualizer = new EnhancedAudioVisualizer();
-</script>
-<script src="js/design functions.js"></script>
-
+    <!-- External drawing functions will be loaded here -->
+    <script src="js/visualizer-functions.js"></script>
 </body>
 </html>
-
