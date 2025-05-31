@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(45deg, #0a0a0a, #1a0033, #000);
+            font-family: 'Arial', sans-serif;
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        button {
+            background: linear-gradient(45deg, #ff006e, #fb5607);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+            margin-bottom: 5px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 0, 110, 0.4);
+        }
+
+        button.active {
+            background: linear-gradient(45deg, #00f5ff, #0080ff);
+            transform: scale(1.05);
+        }
+
+        select {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            color: white;
+            padding: 8px;
+            font-size: 12px;
+        }
+
+        select option {
+            background: #333;
+            color: white;
+        }
+
+        #canvas {
+            display: block;
+            background: radial-gradient(circle at center, rgba(20, 20, 40, 0.8), rgba(0, 0, 0, 0.9));
+        }
+
+        .status {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.7);
+            z-index: 100;
+        }
+
+        .mic-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ff006e;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .mic-indicator.active {
+            background: #00ff88;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.6);
+            animation: pulse 1s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { transform: scale(1); opacity: 0.8; }
+            to { transform: scale(1.2); opacity: 1; }
+        }
+
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.6);
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <div class="control-group">
+                <button id="startBtn">🎤 Start Audio</button>
+                <button id="stopBtn" style="display: none;">⏹ Stop</button>
+            </div>
+            
+            <div class="control-group">
+                <label>Visualizer Type:</label>
+                <select id="visualizerType">
+                    <option value="bars">Frequency Bars</option>
+                    <option value="waveform">Waveform</option>
+                    <option value="circle">Circular Bars</option>
+                    <option value="particles">Particles</option>
+                    <option value="geometric">Geometric Patterns</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Color Theme:</label>
+                <select id="colorTheme">
+                    <option value="rainbow">Rainbow</option>
+                    <option value="neon">Neon Pink/Blue</option>
+                    <option value="fire">Fire</option>
+                    <option value="ocean">Ocean</option>
+                    <option value="purple">Purple Vibes</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="mic-indicator" id="micIndicator"></div>
+
+        <canvas id="canvas"></canvas>
+        
+        <div class="status" id="status">
+            Click "Start Audio" to begin visualizing!
+        </div>
+
+        <div class="instructions">
+            🎵 Play music, sing, or make sounds to see the visualization react! Try different visualizer types and themes.
+        </div>
+    </div>
+
+    <script>
+        class AudioVisualizer {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.audioContext = null;
+                this.analyser = null;
+                this.dataArray = null;
+                this.isRunning = false;
+                this.particles = [];
+                
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+                
+                this.setupControls();
+            }
+
+            resize() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            setupControls() {
+                document.getElementById('startBtn').onclick = () => this.start();
+                document.getElementById('stopBtn').onclick = () => this.stop();
+                document.getElementById('visualizerType').onchange = () => this.updateSettings();
+                document.getElementById('colorTheme').onchange = () => this.updateSettings();
+            }
+
+            async start() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.analyser = this.audioContext.createAnalyser();
+                    const source = this.audioContext.createMediaStreamSource(stream);
+                    
+                    source.connect(this.analyser);
+                    this.analyser.fftSize = 256;
+                    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                    
+                    this.isRunning = true;
+                    document.getElementById('startBtn').style.display = 'none';
+                    document.getElementById('stopBtn').style.display = 'inline-block';
+                    document.getElementById('status').style.display = 'none';
+                    document.getElementById('micIndicator').classList.add('active');
+                    
+                    this.animate();
+                } catch (error) {
+                    alert('Error accessing microphone: ' + error.message);
+                }
+            }
+
+            stop() {
+                this.isRunning = false;
+                if (this.audioContext) {
+                    this.audioContext.close();
+                }
+                document.getElementById('startBtn').style.display = 'inline-block';
+                document.getElementById('stopBtn').style.display = 'none';
+                document.getElementById('status').style.display = 'block';
+                document.getElementById('micIndicator').classList.remove('active');
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            updateSettings() {
+                // Settings are applied in real-time during animation
+            }
+
+            getColor(index, max, theme, intensity = 1) {
+                const themes = {
+                    rainbow: (i, m) => `hsl(${(i / m) * 360}, 100%, ${50 + intensity * 30}%)`,
+                    neon: (i, m) => i < m/2 ? `rgba(255, 0, 110, ${intensity})` : `rgba(0, 245, 255, ${intensity})`,
+                    fire: (i, m) => `hsl(${60 - (i/m) * 60}, 100%, ${40 + intensity * 40}%)`,
+                    ocean: (i, m) => `hsl(${200 + (i/m) * 60}, 100%, ${30 + intensity * 50}%)`,
+                    purple: (i, m) => `hsl(${280 + (i/m) * 40}, 100%, ${40 + intensity * 40}%)`
+                };
+                return themes[theme](index, max);
+            }
+
+            drawBars() {
+                const theme = document.getElementById('colorTheme').value;
+                const barWidth = this.canvas.width / this.dataArray.length * 2;
+                let x = 0;
+
+                for (let i = 0; i < this.dataArray.length; i++) {
+                    const barHeight = (this.dataArray[i] / 255) * this.canvas.height * 0.8;
+                    const intensity = this.dataArray[i] / 255;
+                    
+                    this.ctx.fillStyle = this.getColor(i, this.dataArray.length, theme, intensity);
+                    this.ctx.fillRect(x, this.canvas.height - barHeight, barWidth, barHeight);
+                    
+                    // Add glow effect
+                    this.ctx.shadowBlur = 20;
+                    this.ctx.shadowColor = this.getColor(i, this.dataArray.length, theme, intensity);
+                    this.ctx.fillRect(x, this.canvas.height - barHeight, barWidth, barHeight);
+                    this.ctx.shadowBlur = 0;
+                    
+                    x += barWidth + 1;
+                }
+            }
+
+            drawWaveform() {
+                const theme = document.getElementById('colorTheme').value;
+                this.ctx.lineWidth = 3;
+                this.ctx.beginPath();
+                
+                const sliceWidth = this.canvas.width / this.dataArray.length;
+                let x = 0;
+                
+                for (let i = 0; i < this.dataArray.length; i++) {
+                    const v = this.dataArray[i] / 128.0;
+                    const y = v * this.canvas.height / 2;
+                    
+                    if (i === 0) {
+                        this.ctx.moveTo(x, y);
+                    } else {
+                        this.ctx.lineTo(x, y);
+                    }
+                    x += sliceWidth;
+                }
+                
+                const avgIntensity = this.dataArray.reduce((a, b) => a + b) / this.dataArray.length / 255;
+                this.ctx.strokeStyle = this.getColor(0, 1, theme, avgIntensity);
+                this.ctx.shadowBlur = 15;
+                this.ctx.shadowColor = this.getColor(0, 1, theme, avgIntensity);
+                this.ctx.stroke();
+                this.ctx.shadowBlur = 0;
+            }
+
+            drawCircularBars() {
+                const theme = document.getElementById('colorTheme').value;
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+                const radius = Math.min(centerX, centerY) * 0.6;
+                
+                for (let i = 0; i < this.dataArray.length; i++) {
+                    const angle = (i / this.dataArray.length) * Math.PI * 2;
+                    const barHeight = (this.dataArray[i] / 255) * radius * 0.8;
+                    const intensity = this.dataArray[i] / 255;
+                    
+                    const x1 = centerX + Math.cos(angle) * radius;
+                    const y1 = centerY + Math.sin(angle) * radius;
+                    const x2 = centerX + Math.cos(angle) * (radius + barHeight);
+                    const y2 = centerY + Math.sin(angle) * (radius + barHeight);
+                    
+                    this.ctx.strokeStyle = this.getColor(i, this.dataArray.length, theme, intensity);
+                    this.ctx.lineWidth = 4;
+                    this.ctx.shadowBlur = 10;
+                    this.ctx.shadowColor = this.getColor(i, this.dataArray.length, theme, intensity);
+                    
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(x1, y1);
+                    this.ctx.lineTo(x2, y2);
+                    this.ctx.stroke();
+                }
+                this.ctx.shadowBlur = 0;
+            }
+
+            drawParticles() {
+                const theme = document.getElementById('colorTheme').value;
+                const avgVolume = this.dataArray.reduce((a, b) => a + b) / this.dataArray.length;
+                
+                // Add new particles based on volume
+                if (avgVolume > 50 && this.particles.length < 200) {
+                    for (let i = 0; i < Math.floor(avgVolume / 30); i++) {
+                        this.particles.push({
+                            x: this.canvas.width / 2,
+                            y: this.canvas.height / 2,
+                            vx: (Math.random() - 0.5) * 20,
+                            vy: (Math.random() - 0.5) * 20,
+                            life: 1.0,
+                            decay: 0.01 + Math.random() * 0.02,
+                            size: 2 + Math.random() * 4
+                        });
+                    }
+                }
+                
+                // Update and draw particles
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life -= p.decay;
+                    p.vx *= 0.98;
+                    p.vy *= 0.98;
+                    
+                    if (p.life <= 0) {
+                        this.particles.splice(i, 1);
+                        continue;
+                    }
+                    
+                    this.ctx.globalAlpha = p.life;
+                    this.ctx.fillStyle = this.getColor(i, this.particles.length, theme, p.life);
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+                this.ctx.globalAlpha = 1;
+            }
+
+            drawGeometric() {
+                const theme = document.getElementById('colorTheme').value;
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+                const time = Date.now() * 0.001;
+                
+                for (let i = 0; i < this.dataArray.length; i += 4) {
+                    const intensity = this.dataArray[i] / 255;
+                    const radius = 50 + intensity * 200;
+                    const angle = (i / this.dataArray.length) * Math.PI * 2 + time;
+                    
+                    const x = centerX + Math.cos(angle) * radius;
+                    const y = centerY + Math.sin(angle) * radius;
+                    
+                    this.ctx.fillStyle = this.getColor(i, this.dataArray.length, theme, intensity);
+                    this.ctx.shadowBlur = 20;
+                    this.ctx.shadowColor = this.getColor(i, this.dataArray.length, theme, intensity);
+                    
+                    this.ctx.beginPath();
+                    this.ctx.arc(x, y, 5 + intensity * 15, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    
+                    // Draw connecting lines
+                    if (i > 0 && intensity > 0.3) {
+                        const prevAngle = ((i-4) / this.dataArray.length) * Math.PI * 2 + time;
+                        const prevRadius = 50 + (this.dataArray[i-4] / 255) * 200;
+                        const prevX = centerX + Math.cos(prevAngle) * prevRadius;
+                        const prevY = centerY + Math.sin(prevAngle) * prevRadius;
+                        
+                        this.ctx.strokeStyle = this.getColor(i, this.dataArray.length, theme, intensity * 0.5);
+                        this.ctx.lineWidth = 2;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(prevX, prevY);
+                        this.ctx.lineTo(x, y);
+                        this.ctx.stroke();
+                    }
+                }
+                this.ctx.shadowBlur = 0;
+            }
+
+            animate() {
+                if (!this.isRunning) return;
+                
+                requestAnimationFrame(() => this.animate());
+                
+                this.analyser.getByteFrequencyData(this.dataArray);
+                
+                // Clear canvas with fade effect
+                this.ctx.fillStyle = 'rgba(10, 10, 10, 0.1)';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                const visualizerType = document.getElementById('visualizerType').value;
+                
+                switch (visualizerType) {
+                    case 'bars':
+                        this.drawBars();
+                        break;
+                    case 'waveform':
+                        this.drawWaveform();
+                        break;
+                    case 'circle':
+                        this.drawCircularBars();
+                        break;
+                    case 'particles':
+                        this.drawParticles();
+                        break;
+                    case 'geometric':
+                        this.drawGeometric();
+                        break;
+                }
+            }
+        }
+
+        // Initialize the visualizer
+        const visualizer = new AudioVisualizer();
+    </script>
+</body>
+</html>
