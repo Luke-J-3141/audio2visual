@@ -13,9 +13,25 @@
                 <div class="audio-source-toggle">
                     <button id="micBtn" class="active">🎤 Microphone</button>
                     <button id="systemBtn">🔊 System Audio</button>
+                    <button id="fileBtn">📁 Audio File</button>
                 </div>
+                
+                <!-- File upload section -->
+                <div id="fileUploadSection" style="display: none; margin-top: 10px;">
+                    <input type="file" id="audioFileInput" accept="audio/*" style="margin-bottom: 10px;">
+                    <div id="fileInfo" style="font-size: 12px; color: #ccc;"></div>
+                </div>
+                
                 <button id="startBtn">▶ Start Audio</button>
                 <button id="stopBtn" style="display: none;">⏹ Stop</button>
+            </div>
+            
+            <!-- Audio playback controls (only visible when using file) -->
+            <div class="control-group" id="playbackControls" style="display: none;">
+                <audio id="audioPlayer" controls style="width: 100%; margin-bottom: 10px;"></audio>
+                <div style="font-size: 12px; color: #ccc;">
+                    Use the audio controls above to play/pause your file
+                </div>
             </div>
             
             <div class="control-group">
@@ -80,7 +96,7 @@
         </div>
 
         <div class="instructions">
-            🎵 Try playing music, YouTube videos, or use your microphone! Experiment with different visualizers and settings.
+            🎵 Try playing music, YouTube videos, using your microphone, or upload an audio file! Experiment with different visualizers and settings.
         </div>
     </div>
 
@@ -100,12 +116,15 @@
                 this.selectedColor = { h: 200, s: 100, l: 50 };
                 this.audioSource = 'microphone';
                 this.previousData = null;
+                this.audioPlayer = document.getElementById('audioPlayer');
+                this.currentAudioFile = null;
                 
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
                 
                 this.setupControls();
                 this.setupColorWheel();
+                this.setupFileUpload();
             }
 
             resize() {
@@ -116,6 +135,7 @@
             setupControls() {
                 document.getElementById('micBtn').onclick = () => this.setAudioSource('microphone');
                 document.getElementById('systemBtn').onclick = () => this.setAudioSource('system');
+                document.getElementById('fileBtn').onclick = () => this.setAudioSource('file');
                 document.getElementById('startBtn').onclick = () => this.start();
                 document.getElementById('stopBtn').onclick = () => this.stop();
                 document.getElementById('colorMode').onchange = () => this.updateColorMode();
@@ -133,6 +153,37 @@
                 this.audioSource = source;
                 document.getElementById('micBtn').classList.toggle('active', source === 'microphone');
                 document.getElementById('systemBtn').classList.toggle('active', source === 'system');
+                document.getElementById('fileBtn').classList.toggle('active', source === 'file');
+                
+                // Show/hide file upload section
+                document.getElementById('fileUploadSection').style.display = 
+                    source === 'file' ? 'block' : 'none';
+                document.getElementById('playbackControls').style.display = 
+                    source === 'file' && this.currentAudioFile ? 'block' : 'none';
+            }
+
+            setupFileUpload() {
+                const fileInput = document.getElementById('audioFileInput');
+                const fileInfo = document.getElementById('fileInfo');
+                
+                fileInput.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        this.currentAudioFile = file;
+                        const url = URL.createObjectURL(file);
+                        this.audioPlayer.src = url;
+                        
+                        fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                        document.getElementById('playbackControls').style.display = 'block';
+                        
+                        // Clean up previous URL
+                        this.audioPlayer.onloadstart = () => {
+                            if (this.audioPlayer.src.startsWith('blob:')) {
+                                URL.revokeObjectURL(this.audioPlayer.src);
+                            }
+                        };
+                    }
+                };
             }
 
             updateColorMode() {
@@ -159,30 +210,53 @@
 
             async start() {
                 try {
-                    let stream;
-                    
-                    if (this.audioSource === 'system') {
-                        // Try to get system audio (Chrome/Edge only)
-                        try {
-                            stream = await navigator.mediaDevices.getDisplayMedia({ 
-                                audio: true, 
-                                video: false 
-                            });
-                        } catch {
-                            // Fallback to microphone if system audio fails
-                            alert('System audio capture not supported in this browser. Switching to microphone.');
-                            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                            this.setAudioSource('microphone');
-                        }
-                    } else {
-                        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    }
+                    let audioSource;
                     
                     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     this.analyser = this.audioContext.createAnalyser();
-                    const source = this.audioContext.createMediaStreamSource(stream);
                     
-                    source.connect(this.analyser);
+                    if (this.audioSource === 'file') {
+                        if (!this.currentAudioFile) {
+                            alert('Please select an audio file first!');
+                            return;
+                        }
+                        
+                        // Create audio source from the audio element
+                        audioSource = this.audioContext.createMediaElementSource(this.audioPlayer);
+                        
+                        // Connect audio to both analyser and destination (speakers)
+                        audioSource.connect(this.analyser);
+                        audioSource.connect(this.audioContext.destination);
+                        
+                        // Start playing the audio
+                        this.audioPlayer.play().catch(e => {
+                            console.log('Audio play failed:', e);
+                            alert('Could not play audio file. Make sure it\'s a valid audio format.');
+                            return;
+                        });
+                        
+                    } else if (this.audioSource === 'system') {
+                        // Try to get system audio (Chrome/Edge only)
+                        try {
+                            const stream = await navigator.mediaDevices.getDisplayMedia({ 
+                                audio: true, 
+                                video: false 
+                            });
+                            audioSource = this.audioContext.createMediaStreamSource(stream);
+                        } catch {
+                            // Fallback to microphone if system audio fails
+                            alert('System audio capture not supported in this browser. Switching to microphone.');
+                            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                            audioSource = this.audioContext.createMediaStreamSource(stream);
+                            this.setAudioSource('microphone');
+                        }
+                    } else {
+                        // Microphone
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        audioSource = this.audioContext.createMediaStreamSource(stream);
+                    }
+                    
+                    audioSource.connect(this.analyser);
                     this.analyser.fftSize = 512;
                     this.analyser.smoothingTimeConstant = 0.8;
                     this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
@@ -198,6 +272,7 @@
                     this.animate();
                 } catch (error) {
                     alert('Error accessing audio: ' + error.message);
+                    console.error('Audio error:', error);
                 }
             }
 
@@ -205,6 +280,9 @@
                 this.isRunning = false;
                 if (this.audioContext) {
                     this.audioContext.close();
+                }
+                if (this.audioSource === 'file') {
+                    this.audioPlayer.pause();
                 }
                 document.getElementById('startBtn').style.display = 'inline-block';
                 document.getElementById('stopBtn').style.display = 'none';
